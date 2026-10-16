@@ -24,6 +24,7 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -33,14 +34,18 @@ public class MainActivity extends Activity {
     private static final String DEFAULT_URL = "https://script.google.com/macros/s/AKfycbw_6aLH5qbvE6zWMpbAj2BgISczuzo07RYvU-E06nD9iUpZH5jTaJMet1617v_ZxRh5OA/exec";
     private static final String PREFS = "treino_hibrido_prefs";
     private static final String PREF_URL = "webapp_url";
+    private static final String PREF_WARM_CACHE = "warm_web_cache";
 
     private WebView webView;
     private ProgressBar progressBar;
+    private FrameLayout loadingCover;
     private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.AppTheme);
         super.onCreate(savedInstanceState);
+
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         getWindow().setStatusBarColor(Color.rgb(9, 14, 26));
         getWindow().setNavigationBarColor(Color.rgb(9, 14, 26));
@@ -49,14 +54,23 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(9, 14, 26));
 
         webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(9, 14, 26));
         configureWebView(webView);
-        root.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
         progressParams.gravity = Gravity.TOP;
         root.addView(progressBar, progressParams);
+
+        loadingCover = createLoadingCover();
+        root.addView(loadingCover, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         ImageButton settings = new ImageButton(this);
         settings.setImageResource(R.drawable.ic_settings);
@@ -80,8 +94,70 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(getConfiguredUrl());
+            loadConfiguredUrl();
+        } else {
+            hideLoadingCover();
         }
+    }
+
+    private FrameLayout createLoadingCover() {
+        FrameLayout cover = new FrameLayout(this);
+        cover.setBackgroundColor(Color.rgb(9, 14, 26));
+        cover.setClickable(true);
+
+        LinearLayout center = new LinearLayout(this);
+        center.setOrientation(LinearLayout.VERTICAL);
+        center.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher_logo);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        center.addView(logo, new LinearLayout.LayoutParams(dp(112), dp(112)));
+
+        TextView label = new TextView(this);
+        label.setText("Treino Híbrido");
+        label.setTextColor(Color.WHITE);
+        label.setTextSize(20);
+        label.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        labelParams.topMargin = dp(14);
+        center.addView(label, labelParams);
+
+        TextView hint = new TextView(this);
+        hint.setText("Carregando treino…");
+        hint.setTextColor(Color.rgb(161, 161, 170));
+        hint.setTextSize(13);
+        hint.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintParams.topMargin = dp(6);
+        center.addView(hint, hintParams);
+
+        FrameLayout.LayoutParams centerParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        centerParams.gravity = Gravity.CENTER;
+        cover.addView(center, centerParams);
+        return cover;
+    }
+
+    private void showLoadingCover() {
+        if (loadingCover == null) return;
+        loadingCover.animate().cancel();
+        loadingCover.setAlpha(1f);
+        loadingCover.setVisibility(View.VISIBLE);
+    }
+
+    private void hideLoadingCover() {
+        if (loadingCover == null || loadingCover.getVisibility() != View.VISIBLE) return;
+        loadingCover.animate()
+                .alpha(0f)
+                .setDuration(180)
+                .withEndAction(() -> loadingCover.setVisibility(View.GONE))
+                .start();
     }
 
     private void configureWebView(WebView view) {
@@ -89,7 +165,9 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setCacheMode(prefs.getBoolean(PREF_WARM_CACHE, false)
+                ? WebSettings.LOAD_CACHE_ELSE_NETWORK
+                : WebSettings.LOAD_DEFAULT);
         s.setLoadsImagesAutomatically(true);
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setSupportMultipleWindows(false);
@@ -97,6 +175,10 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
         s.setTextZoom(100);
+        s.setOffscreenPreRaster(true);
+
+        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        view.setVerticalScrollBarEnabled(false);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -129,16 +211,39 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 injectPersistenceBridge();
                 CookieManager.getInstance().flush();
+                prefs.edit().putBoolean(PREF_WARM_CACHE, true).apply();
+                view.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+                hideLoadingCover();
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 super.onReceivedError(view, request, error);
                 if (request.isForMainFrame()) {
-                    Toast.makeText(MainActivity.this, "Não consegui carregar o treino. Verifique sua conexão.", Toast.LENGTH_SHORT).show();
+                    hideLoadingCover();
+                    Toast.makeText(MainActivity.this,
+                            "Não consegui carregar o treino. Verifique sua conexão.",
+                            Toast.LENGTH_SHORT).show();
                 }
             }
         });
+    }
+
+    private void loadConfiguredUrl() {
+        showLoadingCover();
+        boolean warm = prefs.getBoolean(PREF_WARM_CACHE, false);
+        webView.getSettings().setCacheMode(warm
+                ? WebSettings.LOAD_CACHE_ELSE_NETWORK
+                : WebSettings.LOAD_DEFAULT);
+        webView.loadUrl(getConfiguredUrl());
+    }
+
+    private void loadFresh(String url) {
+        prefs.edit().putBoolean(PREF_WARM_CACHE, false).apply();
+        webView.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+        showLoadingCover();
+        webView.stopLoading();
+        webView.loadUrl(url);
     }
 
     private void openExternal(Uri uri) {
@@ -170,7 +275,9 @@ public class MainActivity extends Activity {
         input.setSingleLine(false);
         input.setMaxLines(4);
         input.setText(getConfiguredUrl());
-        box.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        box.addView(input, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Treino Híbrido")
@@ -190,13 +297,13 @@ public class MainActivity extends Activity {
                 }
                 prefs.edit().putString(PREF_URL, url).apply();
                 dialog.dismiss();
-                webView.loadUrl(url);
+                loadFresh(url);
                 Toast.makeText(this, "URL salva", Toast.LENGTH_SHORT).show();
             });
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
                 prefs.edit().remove(PREF_URL).apply();
                 input.setText(DEFAULT_URL);
-                webView.loadUrl(DEFAULT_URL);
+                loadFresh(DEFAULT_URL);
                 Toast.makeText(this, "URL padrão restaurada", Toast.LENGTH_SHORT).show();
             });
         });
@@ -281,17 +388,21 @@ public class MainActivity extends Activity {
 
     public static class NativeCache {
         private final SharedPreferences prefs;
+
         NativeCache(Context context) {
             prefs = context.getSharedPreferences("treino_field_cache", Context.MODE_PRIVATE);
         }
+
         @JavascriptInterface
         public void put(String key, String value) {
             prefs.edit().putString(key, value == null ? "" : value).apply();
         }
+
         @JavascriptInterface
         public String get(String key) {
             return prefs.getString(key, "");
         }
+
         @JavascriptInterface
         public void remove(String key) {
             prefs.edit().remove(key).apply();
