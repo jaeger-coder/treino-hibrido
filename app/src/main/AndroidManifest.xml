@@ -4,8 +4,8 @@
         android:allowBackup="true"
         android:usesCleartextTraffic="false"
         android:hardwareAccelerated="true"
-        android:icon="@drawable/ic_launcher"
-        android:roundIcon="@drawable/ic_launcher"
+        android:icon="@drawable/ic_launcher_logo"
+        android:roundIcon="@drawable/ic_launcher_logo"
         android:label="Treino Híbrido"
         android:theme="@style/AppTheme">
         <activity
